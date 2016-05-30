@@ -51,11 +51,12 @@ class YouTube(VideoExtractor):
             code = re.sub(r'(\w+).split\(""\)', r'list(\1)', code)
             return code
 
+        js = js.replace('\n', ' ')
         f1 = match1(js, r'\w+\.sig\|\|([$\w]+)\(\w+\.\w+\)')
         f1def = match1(js, r'function %s(\(\w+\)\{[^\{]+\})' % re.escape(f1)) or \
-                match1(js, r'var %s=function(\(\w+\)\{[^\{]+\})' % re.escape(f1))
+                match1(js, r'\W%s=function(\(\w+\)\{[^\{]+\})' % re.escape(f1))
         f1def = re.sub(r'([$\w]+\.)([$\w]+\(\w+,\d+\))', r'\2', f1def)
-        f1def = 'function %s%s' % (re.escape(f1), f1def)
+        f1def = 'function %s%s' % (f1, f1def)
         code = tr_js(f1def)
         f2s = set(re.findall(r'([$\w]+)\(\w+,\d+\)', f1def))
         for f2 in f2s:
@@ -85,6 +86,7 @@ class YouTube(VideoExtractor):
         return match1(url, r'youtu\.be/([^/]+)') or \
           match1(url, r'youtube\.com/embed/([^/?]+)') or \
           match1(url, r'youtube\.com/v/([^/?]+)') or \
+          match1(url, r'youtube\.com/watch/([^/?]+)') or \
           parse_query_param(url, 'v') or \
           parse_query_param(parse_query_param(url, 'u'), 'v')
 
@@ -150,8 +152,11 @@ class YouTube(VideoExtractor):
 
                 # Parse video page (for DASH)
                 video_page = get_content('https://www.youtube.com/watch?v=%s' % self.vid)
-                ytplayer_config = json.loads(re.search('ytplayer.config\s*=\s*([^\n]+?});', video_page).group(1))
-                self.html5player = 'https:' + ytplayer_config['assets']['js']
+                try:
+                    ytplayer_config = json.loads(re.search('ytplayer.config\s*=\s*([^\n]+?});', video_page).group(1))
+                    self.html5player = 'https:' + ytplayer_config['assets']['js']
+                except:
+                    self.html5player = None
 
             else:
                 # Parse video page instead
@@ -209,15 +214,18 @@ class YouTube(VideoExtractor):
         try:
             caption_tracks = ytplayer_config['args']['caption_tracks'].split(',')
             for ct in caption_tracks:
+                lang = None
                 for i in ct.split('&'):
                     [k, v] = i.split('=')
-                    if k == 'lc': lang = v
+                    if k == 'lc' and lang is None: lang = v
+                    if k == 'v' and v[0] != '.': lang = v # auto-generated
                     if k == 'u': ttsurl = parse.unquote_plus(v)
                 tts_xml = parseString(get_content(ttsurl))
                 transcript = tts_xml.getElementsByTagName('transcript')[0]
                 texts = transcript.getElementsByTagName('text')
                 srt = ""; seq = 0
                 for text in texts:
+                    if text.firstChild is None: continue # empty element
                     seq += 1
                     start = float(text.getAttribute('start'))
                     if text.getAttribute('dur'):
@@ -289,6 +297,7 @@ class YouTube(VideoExtractor):
                         }
         except:
             # VEVO
+            if not self.html5player: return
             self.js = get_content(self.html5player)
             if 'adaptive_fmts' in ytplayer_config['args']:
                 streams = [dict([(i.split('=')[0],

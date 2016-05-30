@@ -19,7 +19,7 @@ def netease_hymn():
     errr oh! fuck ohhh!!!!
     """
 
-def netease_cloud_music_download(url, output_dir='.', merge=True, info_only=False):
+def netease_cloud_music_download(url, output_dir='.', merge=True, info_only=False, **kwargs):
     rid = match1(url, r'id=(.*)')
     if rid is None:
         rid = match1(url, r'/(\d+)/?$')
@@ -38,6 +38,7 @@ def netease_cloud_music_download(url, output_dir='.', merge=True, info_only=Fals
         for i in j['album']['songs']:
             netease_song_download(i, output_dir=new_dir, info_only=info_only)
             try: # download lyrics
+                assert kwargs['caption']
                 l = loads(get_content("http://music.163.com/api/song/lyric/?id=%s&lv=-1&csrf_token=" % i['id'], headers={"Referer": "http://music.163.com/"}))
                 netease_lyric_download(i, l["lrc"]["lyric"], output_dir=new_dir, info_only=info_only)
             except: pass
@@ -55,17 +56,28 @@ def netease_cloud_music_download(url, output_dir='.', merge=True, info_only=Fals
         for i in j['result']['tracks']:
             netease_song_download(i, output_dir=new_dir, info_only=info_only)
             try: # download lyrics
+                assert kwargs['caption']
                 l = loads(get_content("http://music.163.com/api/song/lyric/?id=%s&lv=-1&csrf_token=" % i['id'], headers={"Referer": "http://music.163.com/"}))
                 netease_lyric_download(i, l["lrc"]["lyric"], output_dir=new_dir, info_only=info_only)
             except: pass
 
-    elif "song" in url:
+    elif "song" in url: 
         j = loads(get_content("http://music.163.com/api/song/detail/?id=%s&ids=[%s]&csrf_token=" % (rid, rid), headers={"Referer": "http://music.163.com/"}))
         netease_song_download(j["songs"][0], output_dir=output_dir, info_only=info_only)
         try: # download lyrics
+            assert kwargs['caption']
             l = loads(get_content("http://music.163.com/api/song/lyric/?id=%s&lv=-1&csrf_token=" % rid, headers={"Referer": "http://music.163.com/"}))
             netease_lyric_download(j["songs"][0], l["lrc"]["lyric"], output_dir=output_dir, info_only=info_only)
         except: pass
+
+    elif "program" in url:
+        j = loads(get_content("http://music.163.com/api/dj/program/detail/?id=%s&ids=[%s]&csrf_token=" % (rid, rid), headers={"Referer": "http://music.163.com/"}))
+        netease_song_download(j["program"]["mainSong"], output_dir=output_dir, info_only=info_only)
+
+    elif "radio" in url:
+        j = loads(get_content("http://music.163.com/api/dj/program/byradio/?radioId=%s&ids=[%s]&csrf_token=" % (rid, rid), headers={"Referer": "http://music.163.com/"}))
+        for i in j['programs']:
+            netease_song_download(i["mainSong"],output_dir=output_dir, info_only=info_only)
 
     elif "mv" in url:
         j = loads(get_content("http://music.163.com/api/mv/detail/?id=%s&ids=[%s]&csrf_token=" % (rid, rid), headers={"Referer": "http://music.163.com/"}))
@@ -91,13 +103,14 @@ def netease_video_download(vinfo, output_dir='.', info_only=False):
 
 def netease_song_download(song, output_dir='.', info_only=False):
     title = "%s. %s" % (song['position'], song['name'])
+    songNet = 'p' + song['mp3Url'].split('/')[2][1:]
 
     if 'hMusic' in song and song['hMusic'] != None:
-        url_best = make_url(song['hMusic']['dfsId'])
+        url_best = make_url(songNet, song['hMusic']['dfsId'])
     elif 'mp3Url' in song:
         url_best = song['mp3Url']
     elif 'bMusic' in song:
-        url_best = make_url(song['bMusic']['dfsId'])
+        url_best = make_url(songNet, song['bMusic']['dfsId'])
 
     netease_download_common(title, url_best,
                             output_dir=output_dir, info_only=info_only)
@@ -113,7 +126,7 @@ def netease_download(url, output_dir = '.', merge = True, info_only = False, **k
     if "163.fm" in url:
         url = get_location(url)
     if "music.163.com" in url:
-        netease_cloud_music_download(url,output_dir,merge,info_only)
+        netease_cloud_music_download(url, output_dir, merge, info_only, **kwargs)
     else:
         html = get_decoded_html(url)
 
@@ -125,17 +138,10 @@ def netease_download(url, output_dir = '.', merge = True, info_only = False, **k
         src = r1(r'<source src="([^"]+)"', html) or r1(r'<source type="[^"]+" src="([^"]+)"', html)
 
         if src:
-            sd_url = r1(r'(.+)-mobile.mp4', src) + ".flv"
-            _, _, sd_size = url_info(sd_url)
-
-            hd_url = re.sub('/SD/', '/HD/', sd_url)
-            _, _, hd_size = url_info(hd_url)
-
-            if hd_size > sd_size:
-                url, size = hd_url, hd_size
-            else:
-                url, size = sd_url, sd_size
-            ext = 'flv'
+            url = src
+            _, ext, size = url_info(src)
+            #sd_url = r1(r'(.+)-mobile.mp4', src) + ".flv"
+            #hd_url = re.sub('/SD/', '/HD/', sd_url)
 
         else:
             url = (r1(r'["\'](.+)-list.m3u8["\']', html) or r1(r'["\'](.+).m3u8["\']', html)) + ".mp4"
@@ -162,9 +168,9 @@ def encrypted_id(dfsId):
     return result
 
 
-def make_url(dfsId):
+def make_url(songNet, dfsId):
     encId = encrypted_id(dfsId)
-    mp3_url = "http://m5.music.126.net/%s/%s.mp3" % (encId, dfsId)
+    mp3_url = "http://%s/%s/%s.mp3" % (songNet, encId, dfsId)
     return mp3_url
 
 

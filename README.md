@@ -1,7 +1,7 @@
 # You-Get
 
-[![PyPI version](https://badge.fury.io/py/you-get.png)](http://badge.fury.io/py/you-get)
-[![Build Status](https://api.travis-ci.org/soimort/you-get.png)](https://travis-ci.org/soimort/you-get)
+[![PyPI version](https://img.shields.io/pypi/v/you-get.svg)](https://pypi.python.org/pypi/you-get/)
+[![Build Status](https://travis-ci.org/soimort/you-get.svg)](https://travis-ci.org/soimort/you-get)
 [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/soimort/you-get?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 [You-Get](https://you-get.org/) is a tiny command-line utility to download media contents (videos, audios, images) from the Web, in case there is no other handy way to do it.
@@ -55,23 +55,35 @@ The official release of `you-get` is distributed on [PyPI](https://pypi.python.o
 
     $ pip3 install you-get
 
-### Option 2: Use a pre-built package (Windows only)
+### Option 2: Install via [Antigen](https://github.com/zsh-users/antigen)
+
+Add the following line to your `.zshrc`:
+
+    antigen bundle soimort/you-get
+
+### Option 3: Use a pre-built package (Windows only)
 
 Download the `exe` (standalone) or `7z` (all dependencies included) from: <https://github.com/soimort/you-get/releases/latest>.
 
-### Option 3: Download from GitHub
+### Option 4: Download from GitHub
 
 You may either download the [stable](https://github.com/soimort/you-get/archive/master.zip) (identical with the latest release on PyPI) or the [develop](https://github.com/soimort/you-get/archive/develop.zip) (more hotfixes, unstable features) branch of `you-get`. Unzip it, and put the directory containing the `you-get` script into your `PATH`.
 
 Alternatively, run
 
 ```
-$ make install
+$ [sudo] python3 setup.py install
+```
+
+Or
+
+```
+$ python3 setup.py install --user
 ```
 
 to install `you-get` to a permanent path.
 
-### Option 4: Git clone
+### Option 5: Git clone
 
 This is the recommended way for all developers, even if you don't often code in Python.
 
@@ -79,7 +91,7 @@ This is the recommended way for all developers, even if you don't often code in 
 $ git clone git://github.com/soimort/you-get.git
 ```
 
-Then put the cloned directory into your `PATH`, or run `make install` to install `you-get` to a permanent path.
+Then put the cloned directory into your `PATH`, or run `./setup.py install` to install `you-get` to a permanent path.
 
 ## Upgrading
 
@@ -292,6 +304,7 @@ Use `--url`/`-u` to get a list of downloadable resource URLs extracted from the 
 | Vine        | <https://vine.co/>            |✓| | |
 | Vimeo       | <https://vimeo.com/>          |✓| | |
 | Vidto       | <http://vidto.me/>            |✓| | |
+| Videomega   | <http://videomega.tv/>        |✓| | |
 | Veoh        | <http://www.veoh.com/>        |✓| | |
 | **Tumblr**  | <https://www.tumblr.com/>     |✓|✓|✓|
 | TED         | <http://www.ted.com/>         |✓| | |
@@ -306,10 +319,13 @@ Use `--url`/`-u` to get a list of downloadable resource URLs extracted from the 
 | JPopsuki TV | <http://www.jpopsuki.tv/>     |✓| | |
 | Internet Archive | <https://archive.org/>   |✓| | |
 | **Instagram** | <https://instagram.com/>    |✓|✓| |
+| InfoQ       | <http://www.infoq.com/presentations/> |✓| | |
+| Imgur       | <http://imgur.com/>           | |✓| |
 | Heavy Music Archive | <http://www.heavy-music.ru/> | | |✓|
 | **Google+** | <https://plus.google.com/>    |✓|✓| |
 | Freesound   | <http://www.freesound.org/>   | | |✓|
 | Flickr      | <https://www.flickr.com/>     |✓|✓| |
+| FC2 Video   | <http://video.fc2.com/>       |✓| | |
 | Facebook    | <https://www.facebook.com/>   |✓| | |
 | eHow        | <http://www.ehow.com/>        |✓| | |
 | Dailymotion | <http://www.dailymotion.com/> |✓| | |
@@ -328,6 +344,7 @@ Use `--url`/`-u` to get a list of downloadable resource URLs extracted from the 
 | Dilidili | <http://www.dilidili.com/>     |✓| | |
 | 豆瓣     | <http://www.douban.com/>       | | |✓|
 | 斗鱼     | <http://www.douyutv.com/>      |✓| | |
+| Panda<br/>熊猫 | <http://www.panda.tv/>      |✓| | |
 | 凤凰视频 | <http://v.ifeng.com/>          |✓| | |
 | 风行网   | <http://www.fun.tv/>           |✓| | |
 | iQIYI<br/>爱奇艺 | <http://www.iqiyi.com/> |✓| | |
@@ -335,7 +352,7 @@ Use `--url`/`-u` to get a list of downloadable resource URLs extracted from the 
 | 酷6网    | <http://www.ku6.com/>          |✓| | |
 | 酷狗音乐 | <http://www.kugou.com/>        | | |✓|
 | 酷我音乐 | <http://www.kuwo.cn/>          | | |✓|
-| 乐视网   | <http://www.letv.com/>         |✓| | |
+| 乐视网   | <http://www.le.com/>           |✓| | |
 | 荔枝FM   | <http://www.lizhi.fm/>         | | |✓|
 | 秒拍     | <http://www.miaopai.com/>      |✓| | |
 | MioMio弹幕网 | <http://www.miomio.tv/>    |✓| | |
@@ -343,7 +360,9 @@ Use `--url`/`-u` to get a list of downloadable resource URLs extracted from the 
 | PPTV聚力 | <http://www.pptv.com/>         |✓| | |
 | 齐鲁网   | <http://v.iqilu.com/>          |✓| | |
 | QQ<br/>腾讯视频 | <http://v.qq.com/>      |✓| | |
+| 企鹅直播 | <http://live.qq.com/>          |✓| | |
 | 阡陌视频 | <http://qianmo.com/>           |✓| | |
+| THVideo  | <http://thvideo.tv/>           |✓| | |
 | Sina<br/>新浪视频<br/>微博秒拍视频 | <http://video.sina.com.cn/><br/><http://video.weibo.com/> |✓| | |
 | Sohu<br/>搜狐视频 | <http://tv.sohu.com/> |✓| | |
 | 天天动听 | <http://www.dongting.com/>     | | |✓|
@@ -354,6 +373,9 @@ Use `--url`/`-u` to get a list of downloadable resource URLs extracted from the 
 | **Youku<br/>优酷** | <http://www.youku.com/> |✓| | |
 | 战旗TV   | <http://www.zhanqi.tv/lives>   |✓| | |
 | 央视网   | <http://www.cntv.cn/>          |✓| | |
+| 花瓣     | <http://huaban.com/>           | |✓| |
+| Naver<br/>네이버 | <http://tvcast.naver.com/>     |✓| | |
+| 芒果TV   | <http://www.mgtv.com/>         |✓| | |
 
 For all other sites not on the list, the universal extractor will take care of finding and downloading interesting resources from the page.
 

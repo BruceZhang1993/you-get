@@ -28,7 +28,11 @@ class Youku(VideoExtractor):
     f_code_1 = 'becaf9be'
     f_code_2 = 'bf7e5f01'
 
+    ctype = 12  #differ from 86
+
     def trans_e(a, c):
+        """str, str->str
+        This is an RC4 encryption."""
         f = h = 0
         b = list(range(256))
         result = ''
@@ -49,14 +53,14 @@ class Youku(VideoExtractor):
 
         return result
 
-    def generate_ep(no, streamfileids, sid, token):
+    def generate_ep(self, no, streamfileids, sid, token):
         number = hex(int(str(no), 10))[2:].upper()
         if len(number) == 1:
             number = '0' + number
         fileid = streamfileids[0:8] + number + streamfileids[10:]
         ep = parse.quote(base64.b64encode(
-            ''.join(Youku.trans_e(
-                Youku.f_code_2,
+            ''.join(self.__class__.trans_e(
+                self.f_code_2,  #use the 86 fcode if using 86
                 sid + '_' + fileid + '_' + token)).encode('latin1')),
             safe='~()*!.\''
         )
@@ -65,6 +69,14 @@ class Youku(VideoExtractor):
     # Obsolete -- used to parse m3u8 on pl.youku.com
     def parse_m3u8(m3u8):
         return re.findall(r'(http://[^?]+)\?ts_start=0', m3u8)
+
+    def oset(xs):
+        """Turns a list into an ordered set. (removes duplicates)"""
+        mem = set()
+        for x in xs:
+            if x not in mem:
+                mem.add(x)
+                yield(x)
 
     def get_vid_from_url(url):
         """Extracts video ID from URL.
@@ -87,15 +99,21 @@ class Youku(VideoExtractor):
             assert playlist_id
 
             video_page = get_content('http://www.youku.com/playlist_show/id_%s' % playlist_id)
-            videos = set(re.findall(r'href="(http://v\.youku\.com/[^?"]+)', video_page))
+            videos = Youku.oset(re.findall(r'href="(http://v\.youku\.com/[^?"]+)', video_page))
 
-            for extra_page_url in set(re.findall('href="(http://www\.youku\.com/playlist_show/id_%s_[^?"]+)' % playlist_id, video_page)):
+            # Parse multi-page playlists
+            for extra_page_url in Youku.oset(re.findall('href="(http://www\.youku\.com/playlist_show/id_%s_[^?"]+)' % playlist_id, video_page)):
                 extra_page = get_content(extra_page_url)
-                videos |= set(re.findall(r'href="(http://v\.youku\.com/[^?"]+)', extra_page))
+                videos |= Youku.oset(re.findall(r'href="(http://v\.youku\.com/[^?"]+)', extra_page))
 
         except:
+            # Show full list of episodes
+            if match1(url, r'youku\.com/show_page/id_([a-zA-Z0-9=]+)'):
+                ep_id = match1(url, r'youku\.com/show_page/id_([a-zA-Z0-9=]+)')
+                url = 'http://www.youku.com/show_episode/id_%s' % ep_id
+
             video_page = get_content(url)
-            videos = set(re.findall(r'href="(http://v\.youku\.com/[^?"]+)', video_page))
+            videos = Youku.oset(re.findall(r'href="(http://v\.youku\.com/[^?"]+)', video_page))
 
         self.title = r1(r'<meta name="title" content="([^"]+)"', video_page) or \
                      r1(r'<title>([^<]+)', video_page)
@@ -115,7 +133,16 @@ class Youku(VideoExtractor):
         ssl_context = request.HTTPSHandler(
             context=ssl.SSLContext(ssl.PROTOCOL_TLSv1))
         cookie_handler = request.HTTPCookieProcessor()
-        opener = request.build_opener(ssl_context, cookie_handler)
+        if 'extractor_proxy' in kwargs and kwargs['extractor_proxy']:
+            proxy = parse_host(kwargs['extractor_proxy'])
+            proxy_handler = request.ProxyHandler({
+                'http': '%s:%s' % proxy,
+                'https': '%s:%s' % proxy,
+            })
+        else:
+            proxy_handler = request.ProxyHandler({})
+        opener = request.build_opener(ssl_context, cookie_handler, proxy_handler)
+        opener.addheaders = [('Cookie','__ysuid={}'.format(time.time()))]
         request.install_opener(opener)
 
         assert self.url or self.vid
@@ -127,19 +154,28 @@ class Youku(VideoExtractor):
                 self.download_playlist_by_url(self.url, **kwargs)
                 exit(0)
 
-        api_url = 'http://play.youku.com/play/get.json?vid=%s&ct=12' % self.vid
-        api_url1 = 'http://play.youku.com/play/get.json?vid=%s&ct=10' % self.vid
+        #HACK!
+        if 'api_url' in kwargs:
+            api_url = kwargs['api_url']  #85
+            api12_url = kwargs['api12_url']  #86
+            self.ctype = kwargs['ctype']
+            self.title = kwargs['title']
+            
+        else:
+            api_url = 'http://play.youku.com/play/get.json?vid=%s&ct=10' % self.vid
+            api12_url = 'http://play.youku.com/play/get.json?vid=%s&ct=12' % self.vid
+
         try:
             meta = json.loads(get_content(
                 api_url,
                 headers={'Referer': 'http://static.youku.com/'}
             ))
-            meta1 = json.loads(get_content(
-                api_url1,
+            meta12 = json.loads(get_content(
+                api12_url,
                 headers={'Referer': 'http://static.youku.com/'}
             ))
             data = meta['data']
-            data1 = meta1['data']
+            data12 = meta12['data']
             assert 'stream' in data
         except AssertionError:
             if 'error' in data:
@@ -148,46 +184,79 @@ class Youku(VideoExtractor):
                     self.password_protected = True
                     self.password = input(log.sprint('Password: ', log.YELLOW))
                     api_url += '&pwd={}'.format(self.password)
-                    api_url1 += '&pwd={}'.format(self.password)
+                    api12_url += '&pwd={}'.format(self.password)
                     meta = json.loads(get_content(
                         api_url,
                         headers={'Referer': 'http://static.youku.com/'}
                     ))
-                    meta1 = json.loads(get_content(
-                        api_url1,
+                    meta12 = json.loads(get_content(
+                        api12_url,
                         headers={'Referer': 'http://static.youku.com/'}
                     ))
                     data = meta['data']
-                    data1 = meta1['data']
+                    data12 = meta12['data']
                 else:
                     log.wtf('[Failed] ' + data['error']['note'])
             else:
                 log.wtf('[Failed] Video not found.')
 
-        self.title = data['video']['title']
-        self.ep = data['security']['encrypt_string']
-        self.ip = data['security']['ip']
+        if not self.title:  #86
+            self.title = data['video']['title']
+        self.ep = data12['security']['encrypt_string']
+        self.ip = data12['security']['ip']
 
         if 'stream' not in data and self.password_protected:
             log.wtf('[Failed] Wrong password.')
 
         stream_types = dict([(i['id'], i) for i in self.stream_types])
-        self.streams_parameter = {}
-        audio_lang = data1['stream'][0]['audio_lang']
-        for stream in data1['stream']:
+        audio_lang = data['stream'][0]['audio_lang']
+
+        for stream in data['stream']:
             stream_id = stream['stream_type']
             if stream_id in stream_types and stream['audio_lang'] == audio_lang:
                 if 'alias-of' in stream_types[stream_id]:
                     stream_id = stream_types[stream_id]['alias-of']
-                self.streams[stream_id] = {
-                    'container': stream_types[stream_id]['container'],
-                    'video_profile': stream_types[stream_id]['video_profile'],
-                    'size': stream['size']
-                }
-                self.streams_parameter[stream_id] = {
-                    'fileid': stream['stream_fileid'],
-                    'segs': stream['segs']
-                }
+
+                if stream_id not in self.streams:
+                    self.streams[stream_id] = {
+                        'container': stream_types[stream_id]['container'],
+                        'video_profile': stream_types[stream_id]['video_profile'],
+                        'size': stream['size'],
+                        'pieces': [{
+                            'fileid': stream['stream_fileid'],
+                            'segs': stream['segs']
+                        }]
+                    }
+                else:
+                    self.streams[stream_id]['size'] += stream['size']
+                    self.streams[stream_id]['pieces'].append({
+                        'fileid': stream['stream_fileid'],
+                        'segs': stream['segs']
+                    })
+
+        self.streams_fallback = {}
+        for stream in data12['stream']:
+            stream_id = stream['stream_type']
+            if stream_id in stream_types and stream['audio_lang'] == audio_lang:
+                if 'alias-of' in stream_types[stream_id]:
+                    stream_id = stream_types[stream_id]['alias-of']
+
+                if stream_id not in self.streams_fallback:
+                    self.streams_fallback[stream_id] = {
+                        'container': stream_types[stream_id]['container'],
+                        'video_profile': stream_types[stream_id]['video_profile'],
+                        'size': stream['size'],
+                        'pieces': [{
+                            'fileid': stream['stream_fileid'],
+                            'segs': stream['segs']
+                        }]
+                    }
+                else:
+                    self.streams_fallback[stream_id]['size'] += stream['size']
+                    self.streams_fallback[stream_id]['pieces'].append({
+                        'fileid': stream['stream_fileid'],
+                        'segs': stream['segs']
+                    })
 
         # Audio languages
         if 'dvd' in data and 'audiolang' in data['dvd']:
@@ -209,44 +278,88 @@ class Youku(VideoExtractor):
             stream_id = self.streams_sorted[0]['id']
 
         e_code = self.__class__.trans_e(
-            self.__class__.f_code_1,
+            self.f_code_1,
             base64.b64decode(bytes(self.ep, 'ascii'))
         )
         sid, token = e_code.split('_')
 
-        segs = self.streams_parameter[stream_id]['segs']
-        streamfileid = self.streams_parameter[stream_id]['fileid']
-
-        ksegs = []
-        for no in range(0, len(segs)):
-            k = segs[no]['key']
-            assert k != -1
-            fileid, ep = self.__class__.generate_ep(no, streamfileid,
-                                                    sid, token)
-            q = parse.urlencode(dict(
-                ctype = 12,
-                ev    = 1,
-                K     = k,
-                ep    = parse.unquote(ep),
-                oip   = str(self.ip),
-                token = token,
-                yxon  = 1
-            ))
-            u = 'http://k.youku.com/player/getFlvPath/sid/{sid}_00' \
-                '/st/{container}/fileid/{fileid}?{q}'.format(
-                sid       = sid,
-                container = self.streams[stream_id]['container'],
-                fileid    = fileid,
-                q         = q
-            )
-            ksegs += [i['server'] for i in json.loads(get_content(u))]
+        while True:
+            try:
+                ksegs = []
+                pieces = self.streams[stream_id]['pieces']
+                for piece in pieces:
+                    segs = piece['segs']
+                    streamfileid = piece['fileid']
+                    for no in range(0, len(segs)):
+                        k = segs[no]['key']
+                        if k == -1: break # we hit the paywall; stop here
+                        fileid, ep = self.__class__.generate_ep(self, no, streamfileid,
+                                                                sid, token)
+                        q = parse.urlencode(dict(
+                            ctype = self.ctype,
+                            ev    = 1,
+                            K     = k,
+                            ep    = parse.unquote(ep),
+                            oip   = str(self.ip),
+                            token = token,
+                            yxon  = 1
+                        ))
+                        u = 'http://k.youku.com/player/getFlvPath/sid/{sid}_00' \
+                            '/st/{container}/fileid/{fileid}?{q}'.format(
+                                sid       = sid,
+                                container = self.streams[stream_id]['container'],
+                                fileid    = fileid,
+                                q         = q
+                            )
+                        ksegs += [i['server'] for i in json.loads(get_content(u))]
+            except error.HTTPError as e:
+                # Use fallback stream data in case of HTTP 404
+                log.e('[Error] ' + str(e))
+                self.streams = {}
+                self.streams = self.streams_fallback
+            except KeyError:
+                # Move on to next stream if best quality not available
+                del self.streams_sorted[0]
+                stream_id = self.streams_sorted[0]['id']
+            else: break
 
         if not kwargs['info_only']:
             self.streams[stream_id]['src'] = ksegs
+
+    def open_download_by_vid(self, client_id, vid, **kwargs):
+        """self, str, str, **kwargs->None
+        Override the original one with VideoExtractor.
+        Most of the credit are to @ERioK, who gave his POC."""
+        self.f_code_1 = '10ehfkbv'  #can be retrived by running r.translate with the keys and the list e
+        self.f_code_2 = 'msjv7h2b'
+        self.url = None
+        self.vid = vid
+        self.name = "优酷开放平台 (Youku COOP)"
+
+        #A little bit of work before self.prepare
+        sign_url = "https://api.youku.com/players/custom.json?client_id={client_id}&video_id={video_id}".format(client_id = client_id, video_id = vid)
+        playsign = json.loads(get_content(sign_url))['playsign']
+    
+        api85_url = 'http://play.youku.com/partner/get.json?cid={client_id}&vid={vid}&ct=85&sign={playsign}'.format(client_id = client_id, vid = vid, playsign = playsign)
+        api86_url = 'http://play.youku.com/partner/get.json?cid={client_id}&vid={vid}&ct=86&sign={playsign}'.format(client_id = client_id, vid = vid, playsign = playsign)
+        
+        self.prepare(api_url = api85_url, api12_url = api86_url, ctype = 86, **kwargs)
+        if 'extractor_proxy' in kwargs and kwargs['extractor_proxy']:
+            unset_proxy()
+
+        try:
+            self.streams_sorted = [dict([('id', stream_type['id'])] + list(self.streams[stream_type['id']].items())) for stream_type in self.__class__.stream_types if stream_type['id'] in self.streams]
+        except:
+            self.streams_sorted = [dict([('itag', stream_type['itag'])] + list(self.streams[stream_type['itag']].items())) for stream_type in self.__class__.stream_types if stream_type['itag'] in self.streams]
+
+        self.extract(**kwargs)
+
+        self.download(**kwargs)
 
 site = Youku()
 download = site.download_by_url
 download_playlist = site.download_playlist_by_url
 
 youku_download_by_vid = site.download_by_vid
+youku_open_download_by_vid = site.open_download_by_vid
 # Used by: acfun.py bilibili.py miomio.py tudou.py
